@@ -1,5 +1,9 @@
+use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy::prelude::*;
 use bevy::{app::Startup, window::PrimaryWindow, DefaultPlugins};
+
+mod fps;
+use fps::*;
 
 fn main() {
     App::new()
@@ -8,6 +12,9 @@ fn main() {
         .add_systems(Update, (my_cursor_system, restarting_handle_system))
         .add_systems(Update, animate_sprite_system)
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_systems(Startup, setup_fps_counter)
+        .add_systems(Update, (fps_text_update_system, fps_counter_showhide))
+        .add_plugins(LogDiagnosticsPlugin::default())
         .run();
 }
 
@@ -77,30 +84,33 @@ fn my_cursor_system(
         .map(|ray| ray.origin.truncate())
     {
         mycoords.0 = world_position;
-        eprintln!("World coords: {}/{}", world_position.x, world_position.y);
+        // eprintln!("World coords: {}/{}", world_position.x, world_position.y);
         if buttons.just_pressed(MouseButton::Left) {
             let layout = TextureAtlasLayout::from_grid(UVec2::splat(100), 6, 1, None, None);
             let texture_atlas_layout = texture_atlas_layouts.add(layout);
             let animation_indices = AnimationIndices { first: 1, last: 5 };
-            commands.spawn((
-                Orc,
-                SpriteBundle {
-                    texture: asset_server.load("orc/orc.png"),
-                    transform: Transform {
-                        translation: Vec3::new(world_position.x, world_position.y, 6.0),
+            let id = commands
+                .spawn((
+                    Orc,
+                    SpriteBundle {
+                        texture: asset_server.load("orc/orc.png"),
+                        transform: Transform {
+                            translation: Vec3::new(world_position.x, world_position.y, 6.0),
 
-                        scale: Vec3::splat(6.0),
+                            scale: Vec3::splat(6.0),
+                            ..default()
+                        },
                         ..default()
                     },
-                    ..default()
-                },
-                TextureAtlas {
-                    layout: texture_atlas_layout,
-                    index: animation_indices.first,
-                },
-                animation_indices,
-                AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
-            ));
+                    TextureAtlas {
+                        layout: texture_atlas_layout,
+                        index: animation_indices.first,
+                    },
+                    animation_indices,
+                    AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+                ))
+                .id();
+            println!("Orc spawned id {}", id)
         }
     }
 }
@@ -110,6 +120,13 @@ fn restarting_handle_system(
     buttons: Res<ButtonInput<MouseButton>>,
     mut commands: Commands,
 ) {
+    let mut count = 0;
+    if buttons.just_pressed(MouseButton::Middle) {
+        for _ in q_orcs.iter() {
+            count += 1
+        }
+        eprintln!("Orcs count: {}", count)
+    }
     if buttons.just_pressed(MouseButton::Right) {
         for entity_id in q_orcs.iter() {
             commands.entity(entity_id).despawn();
