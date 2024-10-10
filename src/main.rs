@@ -99,7 +99,7 @@ fn my_cursor_system(
         mycoords.0 = world_position;
         if buttons.just_pressed(MouseButton::Left) {
             let orc = Orc {
-                name: "Grom".to_string(),
+                name: "Orc".to_string(),
             };
 
             let layout = TextureAtlasLayout::from_grid(UVec2::splat(100), 6, 1, None, None);
@@ -109,8 +109,8 @@ fn my_cursor_system(
                 .spawn((
                     orc.clone(),
                     Health {
-                        actual: 50.0,
-                        max: 100.0,
+                        actual: 92.0,
+                        max: 1000.0,
                     },
                     SpriteBundle {
                         texture: asset_server.load("orc/orc.png"),
@@ -130,38 +130,40 @@ fn my_cursor_system(
                     AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
                 ))
                 .with_children(|parent| {
-                    parent.spawn((
-                        SpriteBundle {
-                            sprite: Sprite {
-                                color: Srgba::rgb(1.0, 0.0, 0.0).into(),
-                                custom_size: Some(Vec2::new(100.0, 10.0)),
+                    parent
+                        .spawn((
+                            EmptyHealthBar,
+                            SpriteBundle {
+                                sprite: Sprite {
+                                    color: Srgba::rgb(0.0, 0.0, 0.0).into(),
+                                    custom_size: Some(Vec2::new(100.0, 10.0)),
+                                    ..default()
+                                },
+                                transform: Transform {
+                                    translation: (Vec3::new(0.0, -13.0, 0.0)),
+                                    scale: (Vec3::splat(1.0 / 6.0)),
+                                    ..default()
+                                },
                                 ..default()
                             },
-                            transform: Transform {
-                                translation: (Vec3::new(0.0, -13.0, 1.0)),
-                                scale: (Vec3::splat(1.0 / 6.0)),
-                                ..default()
-                            },
-                            ..default()
-                        },
-                        HealthBar,
-                    ));
-                    parent.spawn((
-                        EmptyHealthBar,
-                        SpriteBundle {
-                            sprite: Sprite {
-                                color: Srgba::rgb(0.0, 0.0, 0.0).into(),
-                                custom_size: Some(Vec2::new(100.0, 10.0)),
-                                ..default()
-                            },
-                            transform: Transform {
-                                translation: (Vec3::new(0.0, -13.0, 0.0)),
-                                scale: (Vec3::splat(1.0 / 6.0)),
-                                ..default()
-                            },
-                            ..default()
-                        },
-                    ));
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                SpriteBundle {
+                                    sprite: Sprite {
+                                        color: Srgba::rgb(1.0, 0.0, 0.0).into(),
+                                        custom_size: Some(Vec2::new(0.0, 10.0)),
+                                        ..default()
+                                    },
+                                    transform: Transform {
+                                        translation: (Vec3::new(0.0, 0.0, 1.0)),
+                                        ..default()
+                                    },
+                                    ..default()
+                                },
+                                HealthBar,
+                            ));
+                        });
                     let text_style = TextStyle {
                         color: Srgba::rgb(1.0, 1.0, 1.0).into(),
                         ..default()
@@ -201,18 +203,28 @@ fn my_cursor_system(
 //}
 
 fn update_health_bar(
-    q_parent: Query<(&Health, &Children)>, // `Query` en lugar de `query`, y `Children` con mayúscula
-    mut q_child: Query<&mut Sprite, With<HealthBar>>, // `Query` en lugar de `query`, y `With` con mayúscula
+    q_parent: Query<(&Health, &Children)>,
+    q_empty_health_bar: Query<(&Children, &Transform), (With<EmptyHealthBar>, Without<HealthBar>)>,
+    mut q_health_bar: Query<(&mut Sprite, &mut Transform), With<HealthBar>>,
 ) {
     for (health, children) in q_parent.iter() {
         for &child in children.iter() {
-            // Verifica si el child tiene una `Sprite` con `HealthBar`
-            if let Ok(mut sprite) = q_child.get_mut(child) {
-                // Calcula el porcentaje de vida
-                let health_percentage = (health.actual * 100.0) / health.max;
-                // Actualiza el tamaño de la barra de salud
-                sprite.custom_size = Some(Vec2::new(health_percentage, 10.0));
-                println!("health: {}", health_percentage);
+            if let Ok((grandchildren, empty_bar_transform)) = q_empty_health_bar.get(child) {
+                for &grandson in grandchildren.iter() {
+                    // Verifica si el child tiene una `Sprite` con `HealthBar`
+                    if let Ok((mut sprite, mut transform)) = q_health_bar.get_mut(grandson) {
+                        let health_percentage = (health.actual) / health.max;
+                        let full_width = 100.0;
+                        let new_width = health_percentage * full_width;
+
+                        // Actualiza el tamaño de la barra de salud
+                        sprite.custom_size = Some(Vec2::new(new_width, 10.0));
+                        transform.translation.x = empty_bar_transform.translation.x
+                            - (full_width / 2.0)
+                            + (new_width / 2.0);
+                        println!("health: {}", new_width);
+                    }
+                }
             }
         }
     }
