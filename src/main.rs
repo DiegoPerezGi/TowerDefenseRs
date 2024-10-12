@@ -1,39 +1,25 @@
 use bevy::prelude::*;
 use bevy::{app::Startup, window::PrimaryWindow, DefaultPlugins};
+use mobs::*;
+
+mod mobs;
 
 fn main() {
     App::new()
         .init_resource::<MyWorldCoords>()
+        .add_plugins(mobs::mob_plugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (my_cursor_system, restarting_handle_system))
+        .add_systems(Update, handle_input_system)
         .add_systems(Update, animate_sprite_system)
-        .add_systems(Update, update_health_bar)
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .run();
 }
 
 // HealthBar
 //
-#[derive(Component)]
-struct HealthBar;
-
-#[derive(Component)]
-struct EmptyHealthBar;
-
-#[derive(Component)]
-struct NameTag;
 
 #[derive(Resource, Default)]
 struct MyWorldCoords(Vec2);
-
-#[derive(Component)]
-struct AnimationIndices {
-    first: usize,
-    last: usize,
-}
-
-#[derive(Component, Deref, DerefMut)]
-struct AnimationTimer(Timer);
 
 fn animate_sprite_system(
     time: Res<Time>,
@@ -55,32 +41,20 @@ fn animate_sprite_system(
 #[derive(Component)]
 struct MainCamera;
 
-#[derive(Component, Clone)]
-struct Orc {
-    name: String,
-}
-
-#[derive(Component)]
-struct Health {
-    actual: f32,
-    max: f32,
-}
-
 fn setup(mut commands: Commands) {
     // Make sure to add the marker component when you set up your camera
     commands.spawn((Camera2dBundle::default(), MainCamera));
 }
 
-fn my_cursor_system(
+fn handle_input_system(
     mut mycoords: ResMut<MyWorldCoords>,
     // query to get the window (so we can read the current cursor position)
     q_window: Query<&Window, With<PrimaryWindow>>,
     // query to get camera transform
     q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut ev_spawn_orc: EventWriter<SpawnOrcEvent>,
+    mut ev_despawn_orcs: EventWriter<DespawnOrcsEvent>,
 ) {
     // get the camera info and transform
     // assuming there is exactly one main camera entity, so Query::single() is OK
@@ -98,147 +72,10 @@ fn my_cursor_system(
     {
         mycoords.0 = world_position;
         if buttons.just_pressed(MouseButton::Left) {
-            let orc = Orc {
-                name: "Orc".to_string(),
-            };
-
-            let layout = TextureAtlasLayout::from_grid(UVec2::splat(100), 6, 1, None, None);
-            let texture_atlas_layout = texture_atlas_layouts.add(layout);
-            let animation_indices = AnimationIndices { first: 1, last: 5 };
-            commands
-                .spawn((
-                    orc.clone(),
-                    Health {
-                        actual: 92.0,
-                        max: 1000.0,
-                    },
-                    SpriteBundle {
-                        texture: asset_server.load("orc/orc.png"),
-                        transform: Transform {
-                            translation: Vec3::new(world_position.x, world_position.y, 6.0),
-
-                            scale: Vec3::splat(6.0),
-                            ..default()
-                        },
-                        ..default()
-                    },
-                    TextureAtlas {
-                        layout: texture_atlas_layout,
-                        index: animation_indices.first,
-                    },
-                    animation_indices,
-                    AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
-                ))
-                .with_children(|parent| {
-                    parent
-                        .spawn((
-                            EmptyHealthBar,
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: Srgba::rgb(0.0, 0.0, 0.0).into(),
-                                    custom_size: Some(Vec2::new(100.0, 10.0)),
-                                    ..default()
-                                },
-                                transform: Transform {
-                                    translation: (Vec3::new(0.0, -13.0, 0.0)),
-                                    scale: (Vec3::splat(1.0 / 6.0)),
-                                    ..default()
-                                },
-                                ..default()
-                            },
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                SpriteBundle {
-                                    sprite: Sprite {
-                                        color: Srgba::rgb(1.0, 0.0, 0.0).into(),
-                                        custom_size: Some(Vec2::new(0.0, 10.0)),
-                                        ..default()
-                                    },
-                                    transform: Transform {
-                                        translation: (Vec3::new(0.0, 0.0, 1.0)),
-                                        ..default()
-                                    },
-                                    ..default()
-                                },
-                                HealthBar,
-                            ));
-                        });
-                    let text_style = TextStyle {
-                        color: Srgba::rgb(1.0, 1.0, 1.0).into(),
-                        ..default()
-                    };
-                    parent.spawn((
-                        Text2dBundle {
-                            text: Text::from_sections([TextSection::new(
-                                orc.name.clone(),
-                                text_style.clone(),
-                            )]),
-                            transform: Transform {
-                                translation: (Vec3::new(0.0, -16.0, 0.0)),
-                                scale: (Vec3::splat(1.0 / 6.0)),
-                                ..default()
-                            },
-                            ..default()
-                        },
-                        NameTag,
-                    ));
-                });
+            ev_spawn_orc.send(SpawnOrcEvent { world_position });
+        };
+        if buttons.just_pressed(MouseButton::Right) {
+            ev_despawn_orcs.send(DespawnOrcsEvent);
         }
-    }
-}
-
-//fn update_health_bar(
-//    q_parent: Query<(&Health, &Children)>,
-//    q_child: Query<&mut Sprite, With<HealthBar>>,
-//) {
-//    for (health, children) in q_parent.iter() {
-//        for &child in children.iter_mut() {
-//            let mut Ok(sprite) = q_child.get(child);
-//            let health_percentage = health.actual * 100.0 / health.max;
-//            sprite.custom_size = Some(Vec2::new(health_percentage, 10.0));
-//            println!("health: {}", health_percentage)
-//        }
-//    }
-//}
-
-fn update_health_bar(
-    q_parent: Query<(&Health, &Children)>,
-    q_empty_health_bar: Query<(&Children, &Transform), (With<EmptyHealthBar>, Without<HealthBar>)>,
-    mut q_health_bar: Query<(&mut Sprite, &mut Transform), With<HealthBar>>,
-) {
-    for (health, children) in q_parent.iter() {
-        for &child in children.iter() {
-            if let Ok((grandchildren, empty_bar_transform)) = q_empty_health_bar.get(child) {
-                for &grandson in grandchildren.iter() {
-                    // Verifica si el child tiene una `Sprite` con `HealthBar`
-                    if let Ok((mut sprite, mut transform)) = q_health_bar.get_mut(grandson) {
-                        let health_percentage = (health.actual) / health.max;
-                        let full_width = 100.0;
-                        let new_width = health_percentage * full_width;
-
-                        // Actualiza el tamaño de la barra de salud
-                        sprite.custom_size = Some(Vec2::new(new_width, 10.0));
-                        transform.translation.x = empty_bar_transform.translation.x
-                            - (full_width / 2.0)
-                            + (new_width / 2.0);
-                        println!("health: {}", new_width);
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn restarting_handle_system(
-    q_orcs: Query<Entity, With<Orc>>,
-    buttons: Res<ButtonInput<MouseButton>>,
-    mut commands: Commands,
-) {
-    if buttons.just_pressed(MouseButton::Right) {
-        for entity_id in q_orcs.iter() {
-            commands.entity(entity_id).despawn_recursive();
-        }
-        eprintln!("Orcs despawned!")
     }
 }
