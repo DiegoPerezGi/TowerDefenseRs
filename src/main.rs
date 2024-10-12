@@ -9,7 +9,7 @@ fn main() {
         .init_resource::<MyWorldCoords>()
         .add_plugins(mobs::mob_plugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, my_cursor_system)
+        .add_systems(Update, handle_input_system)
         .add_systems(Update, animate_sprite_system)
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .run();
@@ -46,7 +46,7 @@ fn setup(mut commands: Commands) {
     commands.spawn((Camera2dBundle::default(), MainCamera));
 }
 
-fn my_cursor_system(
+fn handle_input_system(
     mut mycoords: ResMut<MyWorldCoords>,
     // query to get the window (so we can read the current cursor position)
     q_window: Query<&Window, With<PrimaryWindow>>,
@@ -54,6 +54,7 @@ fn my_cursor_system(
     q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
     mut ev_spawn_orc: EventWriter<SpawnOrcEvent>,
+    mut ev_despawn_orcs: EventWriter<DespawnOrcsEvent>,
 ) {
     // get the camera info and transform
     // assuming there is exactly one main camera entity, so Query::single() is OK
@@ -73,5 +74,8 @@ fn my_cursor_system(
         if buttons.just_pressed(MouseButton::Left) {
             ev_spawn_orc.send(SpawnOrcEvent { world_position });
         };
+        if buttons.just_pressed(MouseButton::Right) {
+            ev_despawn_orcs.send(DespawnOrcsEvent);
+        }
     }
 }
